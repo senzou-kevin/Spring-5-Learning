@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+        https://www.springframework.org/schema/beans/spring-beans.xsd">
+
+    <bean id="person" class="com.java.domain.Person" >
+        <property name="name" value="kevin"/>
+        <property name="age" value="20"/>
+        <property name="myArrays">
+            <array>
+                <value>A</value>
+                <value>B</value>
+                <value>C</value>
+            </array>
+        </property>
+        <property name="list" >
+            <list>
+                <value>AA</value>
+                <value>BB</value>
+                <value>CC</value>
+            </list>
+        </property>
+        <property name="set">
+            <set>
+                <value>A</value>
+                <value>E</value>
+            </set>
+        </property>
+        <property name="map">
+            <map>
+                <entry key="1" value="kevin"/>
+                <entry key="2" value="Bob"/>
+            </map>
+        </property>
+        <property name="pro">
+            <props>
+                <prop key="4">David</prop>
+                <prop key="5">James</prop>
+            </props>
+        </property>
+    </bean>
+
+    <!--在Person类的构造方法中，传递的参数是String name 以及int age
+ 				因此我们可以通过 name属性来选择参数，value参数来赋值
+				注:这里的value参数只能写基本数据类型或者String
+	-->
+    <!--
+        <bean id="person" class="com.java.domain.Person">
+            <constructor-arg name="name" value="kevin"/>
+            <constructor-arg name="age" value="20"/>
+        </bean>
+    -->
+
+    <!--由于index是指参数的位置，从0开始，那么可读性比较差，因为我们不知道这个index
+ 				对应的数据类型是什么，因此我们可以用index+type 这两个属性一起使用。
+				一般来说，使用 name+value这一组比较方便。
+				注:如果是基本数据类型，type需要些包装类的全类名，否则会报异常。
+    -->
+    <!--
+        <bean id="person" class="com.java.domain.Person">
+            <constructor-arg index="0" type="java.lang.String" value="kevin"/>
+            <constructor-arg index="1" type="java.lang.Integer" value="20"/>
+        </bean>
+    -->
+
+    <!--员工做班车去上班，员工依赖于班车
+ 				因此我们需要把班车这个对象注入到员工对象中。
+				1.首先我们先配置ShuttleBus对象
+				2.通过<constructor-arg>标签实现注入。
+				这里我们使用ref 引用来注入ShuttleBus。
+				ref引用就是bean的id值，找到对应的id值即可实现注入
+	-->
+    <!--
+        <bean id="vehicle" class="com.java.vehicle.ShuttleBus"/>
+        <bean id="employee" class="com.java.vehicle.Employee">
+            <constructor-arg name="vehicle" ref="vehicle"/>
+        </bean>
+    -->
+
+    <!--如果想通过set方法注入，person类中得有一个空的构造方法-->
+    <bean id="vehicle" class="com.java.vehicle.ShuttleBus"/>
+    <bean id="employee" class="com.java.vehicle.Employee" >
+        <property name="vehicle" ref="vehicle"/>
+    </bean>
+</beans>
