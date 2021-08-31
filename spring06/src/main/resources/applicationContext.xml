@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+        https://www.springframework.org/schema/beans/spring-beans.xsd
+        http://www.springframework.org/schema/aop
+        https://www.springframework.org/schema/aop/spring-aop.xsd">
+
+    <!--配置accountService -->
+    <bean id="accountService" class="com.java.service.impl.AccountServiceImpl"/>
+
+    <!--配置logger通知 -->
+    <bean id="logger" class="com.java.utils.Logger"/>
+
+    <!-- spring中基于xml的aop配置步骤
+         1.把通知的bean也交给spring来管理
+         2.使用aop:config标签表明开始aop的配置
+         3.使用aop:aspect标签表明开始配置切面
+                    id属性:是给切面提供一个唯一标识
+                    ref:是指定通知类bean的id
+         4.在aop:aspect标签内部使用对应的标签来配置通知的类型
+                aop:before:是前置通知的意思
+                aop:after-returning:后置通知
+                aop:after-throwing:异常通海
+                aop:after:最终通知
+                method:指定哪个方法对应哪个通知比如aop:before 对应before方法
+                pointcut:用于指定切入点表达式，该表达式的含义指的是对业务层哪些方法增强
+                        切入点表达式的写法：execution(表达式)。
+                            表达式写法:访问修饰符 返回值 包名.类名.方法名(参数列表)
+                            访问修饰符可以省略。
+                            返回值可以使用通配符，表示任意返回值
+                            包名可以使用通配符，表示任意包，但是有几级包，就需要写几个*.,如果四级包:*.*.*.*.
+                                包名还可以使用*..表示当前包以及子包
+                            类名的方法都可以使用*来实现统配
+                            参数列表:
+                                可以直接写数据类型
+                                    基本类型直接写名称: int
+                                    引用类型写包名.类名的方式: java.lang.String
+                                可以使用通配符*表示任意类型，但是必须有参数
+                                可以使用..表示有无参数均可，有参数可以是任意类型
+                        全通配写法:
+                            * *..*.*(..)
+
+                        实际开发中切入点表达式通常写法:
+                            切到业务层实现类下的所有方法
+                            * com.java.service.impl.*.*(..)
+    -->
+    <!-- 配置aop-->
+    <aop:config>
+        <aop:aspect id="logAdvice" ref="logger">
+            <!--
+                <aop:before method="before" pointcut="execution(* com.java.service.impl.*.*(..))"/>
+                <aop:after-returning method="afterReturning" pointcut="execution(* com.java.service.impl.*.*(..))"/>
+                <aop:after-throwing method="afterThrowing" pointcut="execution(* com.java.service.impl.*.*(..))"/>
+                <aop:after method="after" pointcut="execution(* com.java.service.impl.*.*(..))"/>
+            -->
+            <aop:around method="around" pointcut="execution(* com.java.service.impl.*.*(..))"/>
+        </aop:aspect>
+    </aop:config>
+</beans>

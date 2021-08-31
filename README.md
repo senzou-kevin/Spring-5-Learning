@@ -6,7 +6,7 @@
 
 
 
-## IOC/DI 
+# IOC/DI 
 
 在传统的编程当中,如果一个类A 依赖于另一个类B， 我们可以在A类中new一个B类。但是这样做有个坏处，类和类之间的耦合度太高，不利于扩展以及维护。不符合高内聚低耦合的设计思想。下面用一个小案例进行解释:
 
@@ -260,9 +260,9 @@ public class TestSpring {
 }
 ```
 
-## Spring创建对象之通过工厂创建对象
+### Spring创建对象之通过工厂创建对象
 
-我们可以通过示例工厂来创建对象
+我们可以通过工厂来创建对象
 
 1.创建一个Aniaml类
 
@@ -321,7 +321,7 @@ factory-method:将工厂方法传入，我们这里是getAnimal()方法
 </beans>
 ```
 
-## Spring创建对象之静态工厂创建对象
+### Spring创建对象之静态工厂创建对象
 
 该方法和工厂方法的区别就在于不需要创建工厂对象。
 
@@ -833,4 +833,679 @@ public class Person {
 属性 value: singleton(单例)/prototype(多例)
 
 和在xml配置文件中bean标签配置scope属性是一模一样。
+
+
+
+## Spring的新注解
+
+### @Configuration
+
+该注解作用在类上，使用了该注解，表示该类是一个配置类。
+
+### @ComponentScan
+
+作用在类上，该注解的作用是在创建容器时要扫描的包。使用属性basepackages="" 来指定哪些包需要被扫描.
+
+### @Bean
+
+该注解的作用在方法上，把方法的返回值作为bean对象存入容器中。该注解有个属性name，用于指定bean的id。默认值是当前方法的名称。
+
+### @Import
+
+该注解作用在类上，表示导入副配置文件。一般的@Configuration配置一些公共的信息，其他的信息可以单独地创建一个类，并在主配置类中使用@Import导入即可。比如和数据库相关的信息，我们可以创建一个新的类专门配置数据库新，然后在主配置类中通过@Import注解导入配置数据库的类即可。
+
+### @propertySource
+
+用来加载指定的配置文件。该属性value="classpath:..." 表示加载类路径下的。
+
+### 示例
+
+利用新注解完成从数据库中获取所有账户信息。
+
+**1.创建SpringConfiguration类，该类是一个配置类。**
+
+```java
+package com.config;
+
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.PropertySource;
+
+@Configuration//表示该类是一个配置类
+//表示com.java包下所有的类有@Service,@Repository,@Controller都会被加载进容器
+@ComponentScan(basePackages = "com.java")
+//加载类路径下的配置文件
+@PropertySource("classpath:JdbcConfig.properties")
+@Import(JdbcConfig.class)//导入副配置文件
+public class SpringConfiguration {
+}
+```
+
+**2.编写副配置文件(和数据库相关)**
+
+```java
+package com.config;
+
+import com.mchange.v2.c3p0.ComboPooledDataSource;
+import org.apache.commons.dbutils.QueryRunner;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+
+import javax.sql.DataSource;
+
+
+public class JdbcConfig {
+    @Value("${jdbc.driver}")
+    private String driver;
+
+    @Value("${jdbc.url}")
+    private String url;
+
+    @Value("${jdbc.user}")
+    private String user;
+
+    @Value("${jdbc.password}")
+    private String password;
+	
+  	//表示方法返回值会作为bean对象存入容器中，于此同时dataSource会注入到QueryRunner中
+    @Bean("queryRunner")
+    public QueryRunner createQueryRunner(@Qualifier("ds1") DataSource dataSource){
+        return new QueryRunner(dataSource);
+    }
+
+	  //将DataSource作为bean对象存入容器。
+    @Bean("ds1")
+    public DataSource createDataSource1(){
+        try{
+            ComboPooledDataSource dataSource=new ComboPooledDataSource();
+            dataSource.setDriverClass(driver);
+            dataSource.setJdbcUrl(url);
+            dataSource.setUser(user);
+            dataSource.setPassword(password);
+            return dataSource;
+        }catch (Exception e){
+            throw new RuntimeException();
+        }
+    }
+
+}
+```
+
+**3.编写accountService接口**
+
+```java
+public interface AccountService {
+
+    /**
+     * 查询所有账户
+     * @return
+     */
+    public List<Account> findAll();
+}
+```
+
+
+
+**4.编写accountService实现类**
+
+```java
+@Service("accountService")
+public class AccountServiceImpl implements AccountService {
+    @Autowired
+    private AccountDao accountDao;
+	
+  	/**
+     * 查询所有账户
+     * @return
+     */
+    @Override
+    public List<Account> findAll() {
+        return accountDao.findAll();
+    }
+}
+```
+
+
+
+**5.编写accountDao接口**
+
+```java
+public interface AccountDao {
+
+    /**
+     * 查询所有账户
+     * @return
+     */
+    public List<Account> findAll();
+}
+```
+
+
+
+**6.编写accountDao实现类**
+
+```java
+@Repository("accountDao")
+public class AccountDaoImpl implements AccountDao {
+    @Autowired
+    private QueryRunner runner;
+
+    /**
+     * 查询所有账户
+     * @return
+     */
+    @Override
+    public List<Account> findAll() {
+        String sql="select * from account1";
+        try {
+            return runner.query(sql,new BeanListHandler<Account>(Account.class));
+        } catch (Exception e) {
+           throw new RuntimeException();
+        }
+    }
+}
+```
+
+
+
+**7.编写单元测试**
+
+```java
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(classes = SpringConfiguration.class)
+@PropertySource("classpath:JdbcConfig.properties")
+public class AccountTest {
+    @Autowired
+    private AccountService service;
+
+    @Test
+    public void testFindAll(){
+        List<Account> accounts = service.findAll();
+        for(Account account:accounts){
+            System.out.println(account);
+        }
+    }
+}
+```
+
+# spring之AOP
+
+AOP:Aspect Oriented Programming的缩写,表示面向切面编程。可以理解为，在不修改源码的情况下，对已有的方法进行增强。Spring的AOP运用代理模式对方法进行增强。在编写代码中，我们常常会遇到有很多方法都需要写相同的代码，比如数据库事务，我们都需要编写开启事务，提交事务，事务回滚。因此我们可以提取这些代码通过 代理模式在不修改源码情况下对需要用到事务控制的方法进行增强。
+
+## AOP相关的术语
+
+**JoinPoint(连接点):** 指被拦截到的点，在这里是指被代理对象的方法。
+
+**Pointcut(切入点):** 对哪些连接点进行拦截定义，也就哪些方法需要增强。
+
+**Advice(通知):** 对拦截到的方法进行增强。有5种通知类型。前置通知，后置通知，异常通知，最终通知，环绕通知。
+
+**前置通知**:在切入点方法之前执行
+
+**后置通知**:在切入点方法正常执行之后再执行。
+
+**异常通知:** 切入点方法出现异常后执行。
+
+**最终通知:** 无论切入点方法是否正常执行，都在在其后执行。
+
+**环绕通知:**将前置通知，后置通知，异常通知和最终通知融合到一起。
+
+## 基于XML的AOP配置前置、后置、异常、最终通知
+
+1.**创建一个Logger类，该类中有4个方法 before，afterReturning，afterThrowing,after 分别代表前置通知，后置通知，异常通知和最终通知**
+
+```java
+package com.java.utils;
+
+public class Logger {
+
+    public void before(){
+        System.out.println("前置通知.....开启事务");
+    }
+
+
+    public void afterReturning(){
+        System.out.println("后置通知......提交事务");
+    }
+
+    public void afterThrowing(){
+        System.out.println("异常通知.......事务回滚");
+    }
+
+    public void after(){
+        System.out.println("最终通知....释放资源");
+    }
+
+
+}
+```
+
+
+
+**创建一个AccountService接口以及实现类。里面有个update方法.** **update方法会被增强。**
+
+```java
+public interface AccountService {
+
+    /**
+     * 模拟查询所有账户
+     */
+    public void update();
+}
+```
+
+
+
+```java
+public class AccountServiceImpl implements AccountService {
+
+    /**
+     * 模拟查询所有账户
+     */
+    @Override
+    public void update() {
+        System.out.println("模拟更新账户");
+    
+    }
+}
+```
+
+
+
+3**.在resources下创建applicationContext.xml并进行AOP配置。其中pointcut是指切入点，表示哪些方法需要被增强。在此模拟中，我们期望update方法被增强。**
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+        https://www.springframework.org/schema/beans/spring-beans.xsd
+        http://www.springframework.org/schema/aop
+        https://www.springframework.org/schema/aop/spring-aop.xsd">
+
+    <!--配置accountService -->
+    <bean id="accountService" class="com.java.service.impl.AccountServiceImpl"/>
+
+    <!--配置logger通知 -->
+    <bean id="logger" class="com.java.utils.Logger"/>
+
+    <!-- spring中基于xml的aop配置步骤
+         1.把通知的bean也交给spring来管理
+         2.使用aop:config标签表明开始aop的配置
+         3.使用aop:aspect标签表明开始配置切面
+                    id属性:是给切面提供一个唯一标识
+                    ref:是指定通知类bean的id
+         4.在aop:aspect标签内部使用对应的标签来配置通知的类型
+                aop:before:是前置通知的意思
+                aop:after-returning:后置通知
+                aop:after-throwing:异常通海
+                aop:after:最终通知
+                method:指定哪个方法对应哪个通知比如aop:before 对应before方法
+                pointcut:用于指定切入点表达式，该表达式的含义指的是对业务层哪些方法增强
+                        切入点表达式的写法：execution(表达式)。
+                            表达式写法:访问修饰符 返回值 包名.类名.方法名(参数列表)
+                            访问修饰符可以省略。
+                            返回值可以使用通配符，表示任意返回值
+                            包名可以使用通配符，表示任意包，但是有几级包，就需要写几个*.,如果四级包:*.*.*.*.
+                                包名还可以使用*..表示当前包以及子包
+                            类名的方法都可以使用*来实现统配
+                            参数列表:
+                                可以直接写数据类型
+                                    基本类型直接写名称: int
+                                    引用类型写包名.类名的方式: java.lang.String
+                                可以使用通配符*表示任意类型，但是必须有参数
+                                可以使用..表示有无参数均可，有参数可以是任意类型
+                        全通配写法:
+                            * *..*.*(..)
+
+                        实际开发中切入点表达式通常写法:
+                            切到业务层实现类下的所有方法
+                            * com.java.service.impl.*.*(..)
+    -->
+    <!-- 配置aop-->
+    <aop:config>
+        <aop:aspect id="logAdvice" ref="logger">
+            <aop:before method="before" pointcut="execution(* com.java.service.impl.*.*(..))"/>
+            <aop:after-returning method="afterReturning" pointcut="execution(* com.java.service.impl.*.*(..))"/>
+            <aop:after-throwing method="afterThrowing" pointcut="execution(* com.java.service.impl.*.*(..))"/>
+            <aop:after method="after" pointcut="execution(* com.java.service.impl.*.*(..))"/>
+        </aop:aspect>
+    </aop:config>
+</beans>
+```
+
+## 基于XML的AOP配置环绕通知
+
+**1.配置logger类 只需要一个around方法。**
+
+```java
+package com.java.utils;
+
+import org.aspectj.lang.ProceedingJoinPoint;
+
+public class Logger {
+    public Object around(ProceedingJoinPoint pjp){
+        Object rtValue=null;
+        try {
+            System.out.println("前置通知.....");
+            //获取方法执行所需的参数
+            Object[] args = pjp.getArgs();
+            //执行.在此之前是前置通知
+            rtValue=pjp.proceed(args);
+            System.out.println("后置通知......");
+            //在此之后是后置通知
+            //返回
+            return rtValue;
+        }catch (Throwable e){
+            //异常通知
+            System.out.println("异常通知.......");
+            throw new RuntimeException(e);
+        }finally {
+            //最终通知
+            System.out.println("最终通知");
+        }
+    }
+
+}
+```
+
+2.**创建一个AccountService接口以及实现类。里面有个update方法.** **update方法会被增强。**
+
+```java
+public interface AccountService {
+
+    /**
+     * 模拟查询所有账户
+     */
+    public void findAll();
+}
+```
+
+
+
+```java
+public class AccountServiceImpl implements AccountService {
+
+    /**
+     * 模拟查询所有账户
+     */
+    @Override
+    public void findAll() {
+        System.out.println("模拟查询所有账户");
+    }
+}
+```
+
+
+
+3**.在resources下创建applicationContext.xml并进行AOP配置。其中pointcut是指切入点，表示哪些方法需要被增强。在此模拟中，我们期望update方法被增强。**
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+        https://www.springframework.org/schema/beans/spring-beans.xsd
+        http://www.springframework.org/schema/aop
+        https://www.springframework.org/schema/aop/spring-aop.xsd">
+
+    <!--配置accountService -->
+    <bean id="accountService" class="com.java.service.impl.AccountServiceImpl"/>
+
+    <!--配置logger通知 -->
+    <bean id="logger" class="com.java.utils.Logger"/>
+ 
+    <!-- 配置aop-->
+    <aop:config>
+        <aop:aspect id="logAdvice" ref="logger">
+            <aop:around method="around" pointcut="execution(* com.java.service.impl.*.*(..))"/>
+        </aop:aspect>
+    </aop:config>
+</beans>
+```
+
+## spring中的事务控制
+
+案例根据用户名进行转账。
+
+**1.配置applicationContext.xml配置文件**
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:tx="http://www.springframework.org/schema/tx" xmlns:context="http://www.springframework.org/schema/context"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+        https://www.springframework.org/schema/beans/spring-beans.xsd
+        http://www.springframework.org/schema/tx
+        https://www.springframework.org/schema/tx/spring-tx.xsd
+        http://www.springframework.org/schema/aop
+        https://www.springframework.org/schema/aop/spring-aop.xsd http://www.springframework.org/schema/context https://www.springframework.org/schema/context/spring-context.xsd">
+
+    <!--开启注解扫描 -->
+    <context:component-scan base-package="com"/>
+
+    <bean id="template" class="org.springframework.jdbc.core.JdbcTemplate">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+
+    <!-- 配置数据库连接池-->
+    <bean id="dataSource" class="org.springframework.jdbc.datasource.DriverManagerDataSource">
+        <property name="driverClassName" value="com.mysql.cj.jdbc.Driver"></property>
+        <property name="url" value="jdbc:mysql:///mybatis?serverTimezone=GMT"></property>
+        <property name="username" value="root"></property>
+        <property name="password" value="zs19940302"></property>
+    </bean>
+  
+  	<!-- spring基于xml的声明事务控制的配置步骤
+         1.配置事务管理器
+         2.配置事务通知
+                此时我们需要导入事务的约束
+                使用tx:advice标签配置事务通知
+                    属性:
+                        id:给事务通知起一个唯一标志
+                        transactionManager:给事务通知一个事务管理器引用
+         3.配置aop中的通用切入点表达式
+         4.建立事务通知和切入点表达式的关系
+         5.配置事务的属性
+                在事务通知tx:advice标签内部
+    -->
+
+    <!-- 配置事务管理器-->
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <!-- 注入数据库连接池-->
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+
+    <!-- 配置事务通知-->
+    <tx:advice id="txAdvice">
+        <tx:attributes>
+            <!-- 表示find开头的方法不需要事务 因为是查询-->
+            <tx:method name="find*" read-only="true" propagation="SUPPORTS"/>
+            <!-- 表示出了find开头以外其他的方法都需要事务的支持-->
+            <tx:method name="*" read-only="false" propagation="REQUIRED"/>
+        </tx:attributes>
+    </tx:advice>
+
+    <!--配置aop -->
+    <aop:config>
+        <aop:pointcut id="pt1" expression="execution(* com.service.impl.*.*(..))"/>
+        <!--建立切入点表达式和事务通知的关系 -->
+        <aop:advisor advice-ref="txAdvice" pointcut-ref="pt1"/>
+    </aop:config>
+</beans>
+```
+
+
+
+**2.创建一个JavaBean对象Account，用于当获取数据库账户信息时存到Account类中**
+
+```java
+package com.domain;
+
+public class Account {
+    private Integer id;
+    private String name;
+    private Float money;
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public Float getMoney() {
+        return money;
+    }
+
+    public void setMoney(Float money) {
+        this.money = money;
+    }
+
+    @Override
+    public String toString() {
+        return "Account{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", money=" + money +
+                '}';
+    }
+}
+```
+
+
+
+**3.创建AccountDao接口以及实现类**
+
+```java
+public interface AccountDao {
+
+    /**
+     * 根据用户名字查询账户
+     * @param name
+     * @return
+     */
+    public Account findAccountByName(String name);
+
+    /**
+     * 更新账户
+     * @param account
+     */
+    public void updateAccount(Account account);
+}
+```
+
+
+
+```java
+@Repository("accountDao")
+public class AccountDaoImpl implements AccountDao {
+    @Autowired
+    private JdbcTemplate template;
+
+    /**
+     * 根据用户名字查询账户
+     * @param name
+     * @return
+     */
+    @Override
+    public Account findAccountByName(String name) {
+        String sql="select * from account1 where name=?";
+        return template.queryForObject(sql,new BeanPropertyRowMapper<Account>(Account.class),name);
+    }
+
+    /**
+     * 更新账户
+     * @param account
+     */
+    @Override
+    public void updateAccount(Account account) {
+        String sql="update account1 set money=? where name=?";
+        template.update(sql,account.getMoney(),account.getName());
+    }
+}
+```
+
+
+
+**4.创建accountService接口以及实现类**
+
+```java
+public interface AccountService {
+
+    /**
+     * 转账
+     * @param sourceName
+     * @param targetName
+     * @param money
+     */
+    public void transfer(String sourceName,String targetName,Float money);
+
+}
+```
+
+
+
+```java
+@Service("accountService")
+public class AccountServiceImpl implements AccountService {
+    @Autowired
+    private AccountDao accountDao;
+
+
+    @Override
+    public void transfer(String sourceName, String targetName, Float money) {
+        //1.获取转账人的账户信息
+        Account source = accountDao.findAccountByName(sourceName);
+        //2.获取收款人的账户信息
+        Account target = accountDao.findAccountByName(targetName);
+        //3.转账人账户减钱
+        source.setMoney(source.getMoney()-money);
+        //4.收款人账户加钱
+        target.setMoney(target.getMoney()+money);
+        //5.更新转账人的账户信息
+        accountDao.updateAccount(source);
+
+        //6.更新收款人的账户信息
+        accountDao.updateAccount(target);
+    }
+}
+```
+
+
+
+**5.测试**
+
+**如果在转账方法中最后更新2个账户之间添加一个异常，那么转账会失效，因为出现异常后会触发事务回滚。**
+
+```java
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(locations = "classpath:applicationContext.xml")
+public class AccountTest {
+    @Autowired
+    private AccountService service;
+
+    @Test
+    public void transfer(){
+        service.transfer("kevin","jack",100f);
+    }
+}
+```
+
+
 
